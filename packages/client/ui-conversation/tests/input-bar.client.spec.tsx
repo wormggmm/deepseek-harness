@@ -14,6 +14,8 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { ClientContext, ConversationSnapshot, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import { SessionInputShell } from '../src/client/input/facade.ts'
+import { DEFAULT_ENTER_BINDING } from '../src/client/input/enter-binding.ts'
+import type { ComposerEnterBinding } from '../src/client/contract/enter-binding.ts'
 import type { ComposerAttachment } from '../src/client/contract/slots.ts'
 import type { DraftAttachmentId } from '../src/client/input/contract.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
@@ -35,6 +37,9 @@ const NATIVE_SET_START = Object.getOwnPropertyDescriptor(Range.prototype, 'setSt
   .value as (this: Range, node: Node, offset: number) => void
 
 const SCTX = {} as ClientContext
+// Stable identity for the no-lexicon stub: a fresh Map per getSnapshot would
+// break the snapshot-store identity rule and re-render in a loop.
+const EMPTY_LEXICON: ReadonlyMap<'/' | '@', readonly string[]> = new Map()
 const SID = 's1' as SessionId
 
 function snapshotOf(overrides: Partial<ConversationSnapshot> = {}): ConversationSnapshot {
@@ -88,6 +93,9 @@ interface BenchOptions {
   addImages?: (files: readonly File[]) => string | null
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
+  enterBinding?: ComposerEnterBinding
+  /** Popup arbitration verdict the slash pipeline would return for Enter (absent = no pipeline, 'pass'). */
+  arbitrate?: (key: string, composing: boolean) => string
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
 }
 
@@ -121,10 +129,11 @@ function bench(over?: BenchOptions) {
     ...(over?.steerQueue !== undefined ? { steerQueue: over.steerQueue } : {}),
     // Lexicon-only stub: adjudication untouched (undefined slash methods are
     // never reached — these benches drive plain-draft flows only).
-    ...(lex !== undefined
+    ...(lex !== undefined || over?.arbitrate !== undefined
       ? {
         inputTriggers: (() => ({
-          lexicon: { getSnapshot: () => lex, subscribe: () => () => {} },
+          lexicon: { getSnapshot: () => lex ?? EMPTY_LEXICON, subscribe: () => () => {} },
+          ...(over?.arbitrate !== undefined ? { arbitrate: over.arbitrate } : {}),
         })) as unknown as NonNullable<ShellDeps['inputTriggers']>,
       }
       : {}),
@@ -171,6 +180,7 @@ function bench(over?: BenchOptions) {
       const preferred = over?.busyEnter ?? 'queue'
       return gesture === 'enter' ? preferred : preferred === 'queue' ? 'steer' : 'queue'
     },
+    enterBinding: over?.enterBinding ?? DEFAULT_ENTER_BINDING,
     toggleCommandMenu: over?.toggleCommandMenu ?? vi.fn(),
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
@@ -613,6 +623,58 @@ describe('Enter semantics', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('a binding resolving newline lets plain Enter insert a line break natively', () => {
+    // The ui-enter-send binding: Enter stays native, Cmd/Ctrl+Enter sends.
+    const enterBinding: ComposerEnterBinding = {
+      resolve: gesture => (gesture.ctrl || gesture.meta ? 'submit' : 'newline'),
+    }
+    const { textarea, sink, shell } = bench({ draft: 'hello', enterBinding })
+    // Not preventDefault'd: the native textarea newline proceeds, the draft
+    // machine never sees a submit.
+    expect(fireEvent.keyDown(textarea, { key: 'Enter' })).toBe(true)
+    expect(sink).not.toHaveBeenCalled()
+    expect(shell.snapshot.draft).toBe('hello')
+    // The accelerated chord still submits (idle: ordinary Queue mode).
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
+    expect(sink).toHaveBeenCalledWith('hello', [], 'queue')
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+    expect(sink).toHaveBeenCalledTimes(2)
+  })
+
+  it('the accelerated Enter binding keeps the running-state busy policy and whole-queue steering', () => {
+    const enterBinding: ComposerEnterBinding = {
+      resolve: gesture => (gesture.ctrl || gesture.meta ? 'submit' : 'newline'),
+    }
+    // Running with the default busy preference: accelerated Enter steers.
+    const busy = bench({ running: true, draft: '插话', enterBinding })
+    fireEvent.keyDown(busy.textarea, { key: 'Enter', ctrlKey: true })
+    expect(busy.sink).toHaveBeenCalledWith('插话', [], 'steer')
+    // Empty draft: accelerated Enter steers the whole queue.
+    const steerQueue = vi.fn()
+    const queue = bench({ running: true, queue: [row('q-1')], enterBinding, steerQueue })
+    fireEvent.keyDown(queue.textarea, { key: 'Enter', metaKey: true })
+    expect(queue.steerQueue).toHaveBeenCalledTimes(1)
+    expect(queue.sink).not.toHaveBeenCalled()
+  })
+
+  it('popup arbitration owns Enter before the binding: a consumed chord never reaches it', () => {
+    const enterBinding: ComposerEnterBinding = { resolve: () => 'newline' }
+    const { textarea, sink } = bench({
+      draft: 'hello',
+      enterBinding,
+      arbitrate: () => 'consumed',
+    })
+    expect(fireEvent.keyDown(textarea, { key: 'Enter' })).toBe(false)
+    expect(sink).not.toHaveBeenCalled()
+  })
+
+  it('Shift+Enter stays an unconditional native newline even when the binding would submit', () => {
+    const enterBinding: ComposerEnterBinding = { resolve: () => 'submit' }
+    const { textarea, sink } = bench({ draft: 'hello', enterBinding })
+    expect(fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })).toBe(true)
+    expect(sink).not.toHaveBeenCalled()
   })
 })
 

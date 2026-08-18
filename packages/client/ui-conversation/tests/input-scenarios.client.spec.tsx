@@ -20,6 +20,7 @@ import { FakeApiClient, fakeRemote, ok } from '../../runtime/tests/fake-api.clie
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
+import { DEFAULT_ENTER_BINDING } from '../src/client/input/enter-binding.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -140,6 +141,7 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
     removeImage: () => {},
     draftImages: () => [],
     resolveSubmitMode: () => 'queue',
+    enterBinding: DEFAULT_ENTER_BINDING,
     toggleCommandMenu: (selection) => {
       const snapshot = shell.snapshot
       controller.toggleSource('command', {

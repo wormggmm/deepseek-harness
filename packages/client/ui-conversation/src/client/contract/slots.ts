@@ -19,6 +19,7 @@ import type {
 } from '../input/contract.ts'
 import type { createChatStore } from '../stores.ts'
 import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submission.ts'
+import type { ComposerEnterBinding } from './enter-binding.ts'
 import type { ChatNode, ChatNodeKind } from './chat-nodes.ts'
 import type { CallId, SelectionTarget, ViewTab } from './views.ts'
 
@@ -505,6 +506,12 @@ export interface ComposerBarInjected {
     gesture: ComposerSubmitGesture,
     steeringAvailable: boolean,
   ) => InputSubmitMode
+  /**
+   * Enter-key decision for the composer textarea: the optional
+   * `composerEnterBinding` service when a plugin provides one, otherwise the
+   * shipped binding (Enter submits; Shift+Enter newline).
+   */
+  enterBinding: ComposerEnterBinding
   /** Toggle the shared slash menu with only its command source; absent without ui-input-trigger or a session. */
   toggleCommandMenu: ((selection: EditSelection) => void) | undefined
   /** Cancel the in-flight turn; absent with the session. */

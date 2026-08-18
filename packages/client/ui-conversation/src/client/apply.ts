@@ -24,6 +24,7 @@ import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from './input/blocks.ts'
 import { InputHub } from './input/hub.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
+import { DEFAULT_ENTER_BINDING } from './input/enter-binding.ts'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
@@ -294,6 +295,7 @@ export function apply(ctx: Context): void {
           draftImages: undefined,
           resolveSubmitMode: (running, gesture, steeringAvailable) =>
             submissionPolicy.resolve(running, gesture, steeringAvailable),
+          enterBinding: ctx.get('composerEnterBinding') ?? DEFAULT_ENTER_BINDING,
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
@@ -328,6 +330,7 @@ export function apply(ctx: Context): void {
         draftImages: ids => conversation.draftImages(ids),
         resolveSubmitMode: (running, gesture, steeringAvailable) =>
           submissionPolicy.resolve(running, gesture, steeringAvailable),
+        enterBinding: ctx.get('composerEnterBinding') ?? DEFAULT_ENTER_BINDING,
         toggleCommandMenu: inputTriggers === undefined
           ? undefined
           : (selection) => {

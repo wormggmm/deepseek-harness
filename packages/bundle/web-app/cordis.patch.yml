@@ -270,6 +270,12 @@
     - id: ui-user-questions
       name: '@deepseek-ai/dsh-client-ui-user-questions'
 
+    # Enter-key binding: Ctrl+Enter sends, Enter inserts a line break.
+    # Remove this row (or disable it in $DSH_HOME/cordis.patch.yml) to
+    # restore Enter-sends with Shift+Enter as the newline.
+    - id: ui-enter-send
+      name: '@deepseek-ai/dsh-client-ui-enter-send'
+
     - id: ui-trajectory
       name: '@deepseek-ai/dsh-client-ui-trajectory'
 
