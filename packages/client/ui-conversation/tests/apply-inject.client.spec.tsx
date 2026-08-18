@@ -25,6 +25,7 @@ import type {
   ConversationSessionInjected, DetailsInjected,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { createChatStore } from '../src/client/stores.ts'
+import type { ComposerEnterBinding } from '../src/client/contract/enter-binding.ts'
 
 // The service reads its initial locale from the browser; these specs assert
 // the shipped Chinese copy, so they state the browser they assume.
@@ -214,6 +215,25 @@ describe('conversation slot inject API', () => {
     const stop = injectFn(ROOT).stop!
     await b.feature.dispose()
     expect(() => { stop() }).toThrow(/unavailable through the session scope/)
+    await b.runtime.dispose()
+  })
+
+  it('composer bar inject carries the provided composerEnterBinding, else the shipped default', async () => {
+    const b = await bench()
+    const entry = b.entryOf('conversation.composer.bar')
+    const injectFn = entry.inject as unknown as (sessionId: SessionId | undefined) => ComposerBarInjected
+    // No provider: the shipped default applies on both sides of the
+    // session-maybe split (Enter submits, Shift+Enter newline before it).
+    expect(injectFn(undefined).enterBinding.resolve({ shift: false, ctrl: false, meta: false, alt: false })).toBe('submit')
+    expect(injectFn(ROOT).enterBinding.resolve({ shift: false, ctrl: true, meta: false, alt: false })).toBe('submit')
+    // A provider's binding reaches the bar on the next inject: the service
+    // is resolved per inject, so a late provide is picked up immediately.
+    const binding: ComposerEnterBinding = {
+      resolve: gesture => (gesture.ctrl || gesture.meta ? 'submit' : 'newline'),
+    }
+    b.runtime.provide('composerEnterBinding', binding)
+    expect(injectFn(ROOT).enterBinding).toBe(binding)
+    expect(injectFn(undefined).enterBinding).toBe(binding)
     await b.runtime.dispose()
   })
 

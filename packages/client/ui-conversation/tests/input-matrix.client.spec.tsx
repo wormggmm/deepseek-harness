@@ -16,6 +16,7 @@ import type { SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/cli
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
+import { DEFAULT_ENTER_BINDING } from '../src/client/input/enter-binding.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -54,6 +55,7 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
     removeImage: () => {},
     draftImages: () => [],
     resolveSubmitMode: () => 'queue',
+    enterBinding: DEFAULT_ENTER_BINDING,
     toggleCommandMenu: vi.fn(),
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
