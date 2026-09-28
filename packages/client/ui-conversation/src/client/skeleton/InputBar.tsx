@@ -8,7 +8,8 @@
  *
  * The text surface is the shell-owned Lexical editor bound here through
  * ComposerContentEditable; chips render as decorator portals, and the
- * keymap registers submit/menu/paste gestures on the editor command layer.
+ * keymap registers the Enter binding, menu, and paste gestures on the
+ * editor command layer.
  * The no-session state renders the SAME div inert as the Workspace-picker
  * trigger instead of a parallel tree.
  */
@@ -44,7 +45,7 @@ export type InputBarProps = ComposerBarProps
 
 export const InputBar = memo(function InputBar({
   useSession, useInput, inputActions, keyboard, addFiles, removeAttachment, resolveDraftAttachments,
-  retryFileUpload,
+  retryFileUpload, enterBinding,
   toggleCommandMenu, stop, t,
   renderSlot, useBusyEnter, useFileUploads, useNotices, useLexicon, useMenuLauncher, useStopShortcut,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
@@ -260,8 +261,8 @@ export const InputBar = memo(function InputBar({
 
   useEffect(() => {
     if (editor === null || keyboard === undefined) return
-    return installDraftKeymap(editor, keyboard, gate)
-  }, [editor, keyboard])
+    return installDraftKeymap(editor, keyboard, gate, enterBinding)
+  }, [editor, keyboard, enterBinding])
 
   // Button presses steal focus from the editor; suppress at mousedown so
   // typing continues seamlessly. Lexical's focus() carries preventScroll and

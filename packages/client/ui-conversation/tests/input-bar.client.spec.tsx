@@ -26,6 +26,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SubmitOutcome } from '../src/client/contract/input.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
+import { DEFAULT_ENTER_BINDING } from '../src/client/input/enter-binding.ts'
+import type { ComposerEnterBinding } from '../src/client/contract/enter-binding.ts'
 import { $replaceDetectSpanWithText, $selectDetectSpan } from '../src/client/input/editor/span-map.ts'
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps, DraftFileUploads, InputActivityOwnerProps,
@@ -103,6 +105,8 @@ interface BenchOptions {
   addFiles?: (files: readonly File[], directories?: ReadonlySet<File>) => string | null
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
+  /** Enter-key binding the shell resolved (absent = the shipped default). */
+  enterBinding?: ComposerEnterBinding
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
 }
 
@@ -205,6 +209,7 @@ function bench(over?: BenchOptions) {
     }),
     toggleCommandMenu: over?.toggleCommandMenu ?? vi.fn(),
     useBusyEnter: bindSnapshotSelector(busyEnter),
+    enterBinding: over?.enterBinding ?? DEFAULT_ENTER_BINDING,
     useStopShortcut: bindSnapshotSelector(stopShortcut),
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
@@ -746,6 +751,53 @@ describe('Enter semantics', () => {
     const { textarea, sink } = bench({ running: true, queue: [row('q-1')] })
     fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
     expect(sink).not.toHaveBeenCalled()
+  })
+
+  /** The `ui-enter-send` shape: Cmd/Ctrl submits, every other Enter breaks the line. */
+  const INVERTED_ENTER_BINDING: ComposerEnterBinding = {
+    resolve: gesture => (gesture.ctrl || gesture.meta ? 'submit' : 'newline'),
+  }
+
+  it('a newline-resolving binding keeps plain Enter native and submits on Cmd/Ctrl+Enter', () => {
+    const { textarea, sink, shell } = bench({ draft: 'hello', enterBinding: INVERTED_ENTER_BINDING })
+    // The fall-through line break commits on the next editor flush, as history
+    // restores do; the machine never sees a submission. jsdom restores the
+    // caret at the document start, so the break lands before the seeded text.
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    expect(sink).not.toHaveBeenCalled()
+    act(() => { shell.editor.update(() => {}, { discrete: true }) })
+    expect(shell.snapshot.draft).toBe('\nhello')
+    // The Cmd/Ctrl chord still submits (idle: ordinary Queue mode); the sink
+    // receives the trimmed draft, as every ordinary send does.
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
+    expect(sink).toHaveBeenCalledWith('hello', [], 'queue', expect.any(AbortSignal))
+    // Cmd behaves identically; the committed send cleared this bench's draft, so
+    // the second chord gets a fresh one.
+    const meta = bench({ draft: 'hello', enterBinding: INVERTED_ENTER_BINDING })
+    fireEvent.keyDown(meta.textarea, { key: 'Enter', metaKey: true })
+    expect(meta.sink).toHaveBeenCalledWith('hello', [], 'queue', expect.any(AbortSignal))
+  })
+
+  it('the inverted binding keeps the running-state busy policy and whole-queue steering', () => {
+    // Running with the default busy preference: the Cmd/Ctrl chord steers.
+    const busy = bench({ running: true, draft: '插话', enterBinding: INVERTED_ENTER_BINDING })
+    fireEvent.keyDown(busy.textarea, { key: 'Enter', ctrlKey: true })
+    expect(busy.sink).toHaveBeenCalledWith('插话', [], 'steer', expect.any(AbortSignal))
+    // Empty draft: the same chord steers the whole queue.
+    const steerQueue = vi.fn()
+    const queue = bench({ running: true, queue: [row('q-1')], enterBinding: INVERTED_ENTER_BINDING, steerQueue })
+    fireEvent.keyDown(queue.textarea, { key: 'Enter', metaKey: true })
+    expect(queue.steerQueue).toHaveBeenCalledTimes(1)
+    expect(queue.sink).not.toHaveBeenCalled()
+  })
+
+  it('Shift+Enter stays an unconditional native newline even when the binding would submit', () => {
+    const submitEverything: ComposerEnterBinding = { resolve: () => 'submit' }
+    const { textarea, sink, shell } = bench({ draft: 'hello', enterBinding: submitEverything })
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
+    expect(sink).not.toHaveBeenCalled()
+    act(() => { shell.editor.update(() => {}, { discrete: true }) })
+    expect(shell.snapshot.draft).toBe('\nhello')
   })
 
   it('platform undo/redo chords drive the Lexical history stack, never the browser one', () => {
