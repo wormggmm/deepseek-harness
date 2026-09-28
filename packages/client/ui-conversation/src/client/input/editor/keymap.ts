@@ -1,9 +1,10 @@
 /**
  * Composer keymap over the Lexical command layer: menu arbitration
- * (arrows/escape/enter), space adjudication, the Enter submit gesture, and
- * paste routing. Registered at CRITICAL priority so it decides before
- * @lexical/plain-text's own Enter/paste defaults; a handler returning false
- * falls through to those defaults (Shift+Enter's line break, ordinary
+ * (arrows/escape/enter), space adjudication, the binding-resolved Enter
+ * gesture, and paste routing. Registered at CRITICAL priority so it decides
+ * before @lexical/plain-text's own Enter/paste defaults; a handler returning
+ * false falls through to those defaults (the line break an Enter binding
+ * resolves to 'newline', Shift+Enter's unconditional line break, ordinary
  * spaces, text paste the bar routes itself).
  *
  * IME guard: a composition-closing Enter/Space must not submit or adjudicate.
@@ -21,6 +22,7 @@ import {
 } from 'lexical'
 import { mergeRegister } from '@lexical/utils'
 import type { ArbitrateKey, ArbitrateOutcome } from '../../contract/draft-editor.ts'
+import type { ComposerEnterAction, ComposerEnterGesture } from '../../contract/enter-binding.ts'
 
 /** The bar-supplied behavior behind each intercepted gesture. */
 export interface ComposerKeymapHandlers {
@@ -32,7 +34,14 @@ export interface ComposerKeymapHandlers {
   dismissPopup(): void
   /** Whether Enter may submit right now (locked/busy states refuse). */
   canSubmit(): boolean
-  /** Plain Enter submits; exactly Ctrl+Enter or Cmd+Enter selects accelerated delivery. */
+  /**
+   * Decide one Enter keydown that survived composition and arbitration.
+   * @param gesture - the keydown's modifier flags.
+   * @returns 'newline' to leave the native line break to Lexical (no
+   * preventDefault), or 'submit' to run the submission gesture.
+   */
+  resolveEnter(gesture: ComposerEnterGesture): ComposerEnterAction
+  /** Plain submission; exactly Ctrl+Enter or Cmd+Enter marks accelerated delivery. */
   submit(accelerated: boolean): void
   /**
    * Pasted files with directory metadata supplied by the clipboard entry API.
@@ -145,11 +154,16 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
         return true
       }
       // Menu-open Enter picks the highlight through arbitration; a
-      // no-highlight menu passes down to the submit gesture.
+      // no-highlight menu passes down to the Enter binding.
       if (handlers.arbitrate('enter', false) !== 'pass') {
         event?.preventDefault()
         return true
       }
+      // The binding decides the surviving Enter: 'newline' returns false so
+      // Lexical's own line break applies and the DOM event stays available.
+      if (event !== null && handlers.resolveEnter({
+        shift: event.shiftKey, ctrl: event.ctrlKey, meta: event.metaKey, alt: event.altKey,
+      }) === 'newline') return false
       event?.preventDefault()
       if (event?.repeat === true) return true // held-down Enter must not machine-gun sends
       if (!handlers.canSubmit()) return true

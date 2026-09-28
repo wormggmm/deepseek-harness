@@ -19,6 +19,7 @@ import { EMPTY_CONVERSATION_SNAPSHOT } from '../src/client/contract/snapshot.ts'
 import type { ConversationSnapshot } from '../src/client/contract/snapshot.ts'
 import { createConversationStore } from '../src/client/stores.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
+import { DEFAULT_ENTER_BINDING } from '../src/client/input/enter-binding.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { ConversationContent } from '../src/client/skeleton/ConversationContent.tsx'
 import { ConversationHeader } from '../src/client/skeleton/ConversationHeader.tsx'
@@ -289,6 +290,7 @@ function mount(
           resolveDraftAttachments={() => []}
           toggleCommandMenu={vi.fn()}
           useBusyEnter={bindSnapshotSelector(createSnapshotStore<'queue' | 'steer'>('queue'))}
+          enterBinding={DEFAULT_ENTER_BINDING}
           useStopShortcut={bindSnapshotSelector(createSnapshotStore<readonly string[]>([]))}
           useNotices={bindSnapshotSelector(wiring.notices)}
           useLexicon={bindSnapshotSelector(wiring.lexicon)}

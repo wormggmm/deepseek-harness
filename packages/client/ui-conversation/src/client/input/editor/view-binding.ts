@@ -2,6 +2,7 @@
 import type { MouseEvent, MutableRefObject, RefObject } from 'react'
 import type { LexicalEditor } from 'lexical'
 import type { ComposerKeyboard } from '../../contract/draft-editor.ts'
+import type { ComposerEnterBinding } from '../../contract/enter-binding.ts'
 import type { ComposerBarProps } from '../../contract/slots.ts'
 import type { BusyEnterBehavior } from '../../contract/composer-submission.ts'
 import { resolveSubmitMode } from '../submission-policy.ts'
@@ -101,12 +102,15 @@ export function installDraftFilePicker(
  * @param editor - the borrowed Session-owned editor.
  * @param keyboard - the existing composer keyboard operations.
  * @param gate - live view values read by the installed handlers.
+ * @param enterBinding - the resolved Enter-key binding (the shipped default
+ * unless a plugin provides `composerEnterBinding`).
  * @returns the keymap disposer.
  */
 export function installDraftKeymap(
   editor: LexicalEditor,
   keyboard: ComposerKeyboard,
   gate: MutableRefObject<DraftViewGate>,
+  enterBinding: ComposerEnterBinding,
 ): () => void {
   return registerComposerKeymap(editor, {
     arbitrate: (key, composing) => keyboard.arbitrate(key, composing),
@@ -116,6 +120,7 @@ export function installDraftKeymap(
     },
     dismissPopup: () => { keyboard.dismissPopup() },
     canSubmit: () => !gate.current.locked && !gate.current.machineBusy,
+    resolveEnter: gesture => enterBinding.resolve(gesture),
     submit: (accelerated) => {
       const g = gate.current
       // Empty-draft accelerated Enter acts on the queue instead of the

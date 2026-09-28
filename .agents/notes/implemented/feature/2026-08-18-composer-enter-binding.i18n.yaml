@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-08-18-composer-enter-binding.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-18-composer-enter-binding.md
+/agent-note-composer-enter-key-binding:
+  en: dfbe8d3d09b4dc66
+  zh: 81d4c5770b09512c
+/agent-note-composer-enter-key-binding/problem:
+  en: 1a18ef1510e36728
+  zh: ca3467bcdce8a941
+/agent-note-composer-enter-key-binding/decision:
+  en: ac3c91445379765e
+  zh: 164606359ebd5db1
+/agent-note-composer-enter-key-binding/alternatives-considered:
+  en: a9eda6a062ecd94c
+  zh: d7960448d9b15d8c
+/agent-note-composer-enter-key-binding/consequences:
+  en: d29b4ca33838a411
+  zh: 16ced7f57fc9ce4e

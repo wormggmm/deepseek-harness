@@ -14,7 +14,7 @@ import {
 } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionBehaviorOverrides } from '@deepseek-ai/dsh-client-test-runtime'
 import {
-  apply, inject, type ComposerBarInjected, type ConversationInjected,
+  apply, inject, type ComposerBarInjected, type ComposerEnterGesture, type ConversationInjected,
   type ConversationSessionHeaderInjected, type ConversationSessionInjected, type ViewTab,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -144,6 +144,23 @@ async function bench() {
 }
 
 describe('Conversation inject API', () => {
+  it('serves the shipped Enter binding and adopts a provided one on the next inject', async () => {
+    const b = await bench()
+    onTestFinished(() => b.runtime.dispose())
+    const plain: ComposerEnterGesture = { shift: false, ctrl: false, meta: false, alt: false }
+    const ctrl: ComposerEnterGesture = { shift: false, ctrl: true, meta: false, alt: false }
+    // No provider: both the live bar and the inert no-Session bar submit every
+    // consulted Enter.
+    expect(b.composerApi(ROOT).enterBinding.resolve(plain)).toBe('submit')
+    expect(b.composerApi(undefined).enterBinding.resolve(ctrl)).toBe('submit')
+    // A plugin-provided service is resolved per inject, so the next one sees it.
+    b.runtime.ctx.provide('composerEnterBinding', {
+      resolve: gesture => (gesture.ctrl || gesture.meta ? 'submit' : 'newline'),
+    })
+    expect(b.composerApi(ROOT).enterBinding.resolve(plain)).toBe('newline')
+    expect(b.composerApi(ROOT).enterBinding.resolve(ctrl)).toBe('submit')
+  })
+
   it('owns the File action, reads its mounted composer availability, and unregisters on disposal', async () => {
     const b = await bench()
     onTestFinished(() => b.runtime.dispose())
@@ -452,7 +469,8 @@ describe('Conversation inject API', () => {
     }, { discrete: true })
     const off = registerComposerKeymap(editor, {
       arbitrate: () => 'pass', space: () => false, dismissPopup: () => {},
-      canSubmit: () => true, submit: () => {}, pasteText: (text) => { composer.keyboard!.paste(text) },
+      canSubmit: () => true, resolveEnter: () => 'submit',
+      submit: () => {}, pasteText: (text) => { composer.keyboard!.paste(text) },
       intakeFiles: (files, directories) => { expect(composer.addFiles?.(files, directories)).toBeNull() },
     })
     onTestFinished(off)

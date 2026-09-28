@@ -9,6 +9,7 @@ import { fireEvent } from '@testing-library/react'
 import { $createParagraphNode, $createTextNode, $getRoot, createEditor } from 'lexical'
 import { registerPlainText } from '@lexical/plain-text'
 import { registerComposerKeymap } from '../src/client/input/editor/keymap.ts'
+import type { ComposerEnterGesture } from '../src/client/contract/enter-binding.ts'
 
 describe('keymap keydown routing', () => {
   it('clears composition presentation on root swaps and unregisters pending callbacks', async () => {
@@ -24,7 +25,8 @@ describe('keymap keydown routing', () => {
     editor.setRootElement(first)
     const unregister = registerComposerKeymap(editor, {
       arbitrate: () => 'pass', space: () => false, dismissPopup: () => {},
-      canSubmit: () => false, submit: () => {}, intakeFiles: () => {}, pasteText: () => {},
+      canSubmit: () => false, resolveEnter: () => 'submit',
+      submit: () => {}, intakeFiles: () => {}, pasteText: () => {},
     })
     onTestFinished(unregister)
     fireEvent.compositionStart(first)
@@ -57,6 +59,7 @@ describe('keymap keydown routing', () => {
       space: () => false,
       dismissPopup: () => {},
       canSubmit: () => true,
+      resolveEnter: () => 'submit',
       submit,
       intakeFiles: () => {},
       pasteText: () => {},
@@ -87,7 +90,7 @@ describe('keymap keydown routing', () => {
     const arbitrate = vi.fn(() => 'pass' as const)
     onTestFinished(registerComposerKeymap(editor, {
       arbitrate, space: () => false, dismissPopup: () => {}, canSubmit: () => true,
-      submit, intakeFiles: () => {}, pasteText: () => {},
+      resolveEnter: () => 'submit', submit, intakeFiles: () => {}, pasteText: () => {},
     }))
     editor.update(() => {
       const paragraph = $createParagraphNode().append($createTextNode('unsent draft'))
@@ -125,6 +128,7 @@ describe('keymap keydown routing', () => {
       space: () => false,
       dismissPopup: () => {},
       canSubmit: () => true,
+      resolveEnter: () => 'submit',
       submit: () => {},
       intakeFiles: () => {},
       pasteText: () => {},
@@ -140,5 +144,105 @@ describe('keymap keydown routing', () => {
     // Shift+Tab is the menu's exit key, never its settle key.
     fireEvent.keyDown(root, { key: 'Tab', keyCode: 9, shiftKey: true })
     expect(arbitrate).toHaveBeenLastCalledWith('tabBack', false)
+  })
+
+  /** One editor with a seeded paragraph and the caret at its end. */
+  function seedCaret(editor: ReturnType<typeof createEditor>): void {
+    editor.update(() => {
+      const paragraph = $createParagraphNode().append($createTextNode('unsent draft'))
+      $getRoot().append(paragraph)
+      paragraph.selectEnd()
+    }, { discrete: true })
+  }
+
+  it('an inverted binding keeps plain Enter native and moves the submit gesture to Cmd/Ctrl+Enter', async () => {
+    const editor = createEditor({ namespace: 'binding-enter', onError: (e) => { throw e } })
+    const root = document.createElement('div')
+    root.contentEditable = 'true'
+    document.body.appendChild(root)
+    onTestFinished(() => { editor.setRootElement(null); root.remove() })
+    editor.setRootElement(root)
+    onTestFinished(registerPlainText(editor))
+    const submit = vi.fn()
+    // The ui-enter-send shape: Cmd/Ctrl submits, every other Enter breaks the line.
+    const resolveEnter = vi.fn((gesture: ComposerEnterGesture) =>
+      (gesture.ctrl || gesture.meta ? 'submit' : 'newline') as 'submit' | 'newline')
+    onTestFinished(registerComposerKeymap(editor, {
+      arbitrate: () => 'pass', space: () => false, dismissPopup: () => {}, canSubmit: () => true,
+      resolveEnter, submit, intakeFiles: () => {}, pasteText: () => {},
+    }))
+    seedCaret(editor)
+
+    const plain = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    root.dispatchEvent(plain)
+    await Promise.resolve()
+
+    expect(submit).not.toHaveBeenCalled()
+    // Our handler returned false, so @lexical/plain-text's own fallback ran:
+    // it inserts the break the draft projects as a newline, and owns the
+    // preventDefault (an Alt chord, by contrast, stays available to the page).
+    expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe('unsent draft\n')
+    expect(plain.defaultPrevented).toBe(true)
+    expect(resolveEnter).toHaveBeenCalledWith({ shift: false, ctrl: false, meta: false, alt: false })
+
+    fireEvent.keyDown(root, { key: 'Enter', ctrlKey: true })
+    expect(submit).toHaveBeenCalledWith(true)
+    fireEvent.keyDown(root, { key: 'Enter', metaKey: true })
+    expect(submit).toHaveBeenCalledTimes(2)
+  })
+
+  it('decides Enter through arbitration before the binding', () => {
+    const editor = createEditor({ namespace: 'binding-arbitration', onError: (e) => { throw e } })
+    const root = document.createElement('div')
+    root.contentEditable = 'true'
+    document.body.appendChild(root)
+    onTestFinished(() => { editor.setRootElement(null); root.remove() })
+    editor.setRootElement(root)
+    onTestFinished(registerPlainText(editor))
+    const resolveEnter = vi.fn(() => 'newline' as const)
+    onTestFinished(registerComposerKeymap(editor, {
+      arbitrate: () => 'consumed', space: () => false, dismissPopup: () => {}, canSubmit: () => true,
+      resolveEnter, submit: () => {}, intakeFiles: () => {}, pasteText: () => {},
+    }))
+    seedCaret(editor)
+
+    // A consumed menu pick never reaches the binding, so the highlight still
+    // settles on Enter while the binding owns the unconsumed fall-through.
+    fireEvent.keyDown(root, { key: 'Enter' })
+    expect(resolveEnter).not.toHaveBeenCalled()
+    expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe('unsent draft')
+  })
+
+  it('never consults the binding for Shift+Enter or the Alt chords', async () => {
+    const editor = createEditor({ namespace: 'binding-guards', onError: (e) => { throw e } })
+    const root = document.createElement('div')
+    root.contentEditable = 'true'
+    document.body.appendChild(root)
+    onTestFinished(() => { editor.setRootElement(null); root.remove() })
+    editor.setRootElement(root)
+    onTestFinished(registerPlainText(editor))
+    const resolveEnter = vi.fn(() => 'newline' as const)
+    const submit = vi.fn()
+    onTestFinished(registerComposerKeymap(editor, {
+      arbitrate: () => 'pass', space: () => false, dismissPopup: () => {}, canSubmit: () => true,
+      resolveEnter, submit, intakeFiles: () => {}, pasteText: () => {},
+    }))
+    seedCaret(editor)
+
+    const shiftEnter = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true })
+    root.dispatchEvent(shiftEnter)
+    await Promise.resolve()
+    expect(resolveEnter).not.toHaveBeenCalled()
+    expect(submit).not.toHaveBeenCalled()
+    // Shift+Enter broke the line through Lexical's fallback, not through a submit.
+    expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe('unsent draft\n')
+
+    // The Alt chord is consumed by the keymap itself: no break, no submit, and
+    // the keydown stays available to application handlers.
+    const altEnter = new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true, cancelable: true })
+    root.dispatchEvent(altEnter)
+    await Promise.resolve()
+    expect(altEnter.defaultPrevented).toBe(false)
+    expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe('unsent draft\n')
   })
 })

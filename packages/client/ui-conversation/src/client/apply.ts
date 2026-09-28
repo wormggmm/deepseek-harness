@@ -30,6 +30,7 @@ import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from './contract/composer-blocks.ts'
 import { InputHub } from './input/hub.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
+import { DEFAULT_ENTER_BINDING } from './input/enter-binding.ts'
 import { queueDockEntry } from './queue/QueueDock.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
@@ -439,6 +440,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           removeAttachment: undefined,
           resolveDraftAttachments: undefined,
           retryFileUpload: undefined,
+          enterBinding: ctx.get('composerEnterBinding') ?? DEFAULT_ENTER_BINDING,
           toggleCommandMenu: undefined,
           stop: undefined,
           hooks: {
@@ -503,6 +505,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
         retryFileUpload: (id) => {
           if (sessions.binding(sessionId) !== undefined) conversation.retryFileUpload(sessionId, id)
         },
+        enterBinding: ctx.get('composerEnterBinding') ?? DEFAULT_ENTER_BINDING,
         toggleCommandMenu: inputTriggers === undefined
           ? undefined
           : (selection) => {
